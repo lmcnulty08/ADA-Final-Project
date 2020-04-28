@@ -1,0 +1,207 @@
+---
+title: "ADA Final Project Code"
+author: "Laura McNulty"
+date: "3/24/2020"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Load libraries and 2017 SMART BRFSS MMSA Data (SAS Transport Format, available at https://www.cdc.gov/brfss/annual_data/2017/files/MMSA2017_XPT.zip)
+library(tidyverse)
+library(haven) # for reading SAS xpt files
+library(lmtest) #for LR test
+library(car) # for VIF test
+library(table1) # for descriptive table
+data <- read_xpt("MMSA2017.xpt")
+```
+
+```{r message=FALSE, warning=FALSE}
+# Check class of MMSA variable
+class(data$`_MMSA`)
+
+# Create subset of data with variables of interest for metro areas of interest
+data.sub <- subset(data, `_MMSA` == 15764 | `_MMSA` == 14454, 
+                   select=c(`_MMSA`, GENHLTH, `_FLSHOT6`, `_AGEG5YR`, `_RACEGR3`,
+                            SEX, MEDCOST))
+summary(data.sub)
+
+# Rename variables
+names(data.sub) <- c("MMSA", "GENHLTH", "FLUSHOT", "AGE", "RACE", "SEX", "MEDCOST") 
+summary(data.sub)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Confirm flu shot variable class and number of observations per level
+class(data.sub$FLUSHOT)
+table(data.sub$FLUSHOT)
+
+# Create a binary flu shot variable (yes or no), defaulting individuals who responded 'Don't Know/Not Sure' or 'Refused'  to NA
+data.sub$FLUSHOTb[data.sub$FLUSHOT==1] <- 1
+data.sub$FLUSHOTb[data.sub$FLUSHOT==2] <- 0
+data.sub$FLUSHOTb <- factor(data.sub$FLUSHOTb, levels=c(1,0), labels=c("Yes", "No"))
+
+# Check re-classification 
+table(data.sub$FLUSHOT, data.sub$FLUSHOTb)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Confirm general health variable class and number of observations per level
+class(data.sub$GENHLTH)
+table(data.sub$GENHLTH)
+
+# Create a new general health variable with 5 levels, defaulting individuals who responded 'Don't Know/Not Sure' or 'Refused' to NA
+data.sub$GENHLTHb[data.sub$GENHLTH==5] <- 0
+data.sub$GENHLTHb[data.sub$GENHLTH==4] <- 1
+data.sub$GENHLTHb[data.sub$GENHLTH==3] <- 2
+data.sub$GENHLTHb[data.sub$GENHLTH==2] <- 3
+data.sub$GENHLTHb[data.sub$GENHLTH==1] <- 4
+data.sub$GENHLTHb <- factor(data.sub$GENHLTHb, levels=c(0,1,2,3,4), 
+                            labels=c("Poor", "Fair", "Good", "Very good", "Excellent" ))
+
+# Check re-classification 
+table(data.sub$GENHLTH, data.sub$GENHLTHb)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Review age groups; create new variable with labels; check re-classification
+table(data.sub$AGE)
+data.sub$AGEb <- factor(data.sub$AGE, levels=c(1,2,3,4,5,6,7,8,9,10,11,12,13), 
+                            labels=c("18 to 24", "25 to 29", "30 to 34", "35 to 39",
+                                     "40 to 44", "45 to 49", "50 to 54", "55 to 59",
+                                     "60 to 64", "65 to 69", "70 to 74", "75 to 79",
+                                     "80 or older"))
+table(data.sub$AGE, data.sub$AGEb)
+
+# Review race groups; create new variable with labels; drop "Don’t know/Not sure/Refused" to NA; check re-classification
+data.sub$RACEb[data.sub$RACE==1]<-0
+data.sub$RACEb[data.sub$RACE==2]<-1
+data.sub$RACEb[data.sub$RACE==3 | data.sub$RACE==4]<-2
+data.sub$RACEb[data.sub$RACE==5]<-3
+data.sub$RACEb[data.sub$RACE==9]<-NA
+data.sub$RACEb<-factor(data.sub$RACEb, levels=c(0,1,2,3), labels=c("White Non-Hispanic", "Black Non-Hispanic", "Other or Multiracial", "Hispanic"))
+table(data.sub$RACE, data.sub$RACEb)
+
+# Review sex; create new variable recoding sex as 1 for male and 0 for female; check re-classification 
+data.sub$SEXb[data.sub$SEX==1]<-1
+data.sub$SEXb[data.sub$SEX==2]<-0
+data.sub$SEXb<-factor(data.sub$SEXb, levels=c(0,1), labels=c("Female", "Male"))
+table(data.sub$SEX, data.sub$SEXb)
+
+# Review cost barrier to accessing medical care variable; create new variable with two levels, defaulting individuals who responded 'Don't Know/Not Sure' or 'Refused' to NA; check re-classification
+table(data.sub$MEDCOST)
+data.sub$MEDCOSTb[data.sub$MEDCOST==1] <- 1
+data.sub$MEDCOSTb[data.sub$MEDCOST==2] <- 0
+data.sub$MEDCOSTb <- factor(data.sub$MEDCOSTb, levels=c(0,1), labels=c("No", "Yes"))
+table(data.sub$MEDCOST, data.sub$MEDCOSTb)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Create a new data set for complete case analysis
+
+# Define variables to include in the complete data set, then subset by those variables
+vars <- c("MMSA", "GENHLTHb", "FLUSHOTb", "AGEb", "RACEb", "SEXb", "MEDCOSTb")
+data.cc<-data.sub[vars]
+
+# Omit NA's in the data set
+data.cc<-na.omit(data.cc)
+
+# Check to make sure there are no NA's
+summary(data.cc)
+```
+
+```{r message=FALSE, warning=FALSE}
+# View differences in proportion reporting cost barriers by race
+costxrace <- table(data.cc$RACEb, data.cc$MEDCOSTb)
+prop.table(costxrace, 1)
+
+# View difference in proportion receiving a flu vaccine by race
+fluxrace <- table(data.cc$RACEb, data.cc$FLUSHOTb)
+prop.table(fluxrace, 1)
+```
+
+```{r message=FALSE, warning=FALSE}
+# View differences in proportion reporting cost barriers by sex
+costxsex <- table(data.cc$SEXb, data.cc$MEDCOSTb)
+prop.table(costxsex, 1)
+
+# View difference in proportion receiving a flu vaccine by sex
+fluxsex <- table(data.cc$SEXb, data.cc$FLUSHOTb)
+prop.table(fluxsex, 1)
+```
+
+```{r}
+# Create descriptive statistics table
+table1(~ SEXb + AGEb + GENHLTHb + RACEb + MEDCOSTb | FLUSHOTb, droplevels = TRUE, data=data.cc)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# Model 1: Bivariate logistic regression model: effect of cost barriers on flu shot odds
+Model1 <- glm(FLUSHOTb ~ MEDCOSTb, data = data.cc, family = "binomial")
+summary(Model1)
+
+ORMod1 <- exp(cbind(OR = coef(Model1), confint(Model1)))
+ORMod1
+  
+# Model 2: Controlling for age and general health status
+Model2 <- glm(FLUSHOTb ~ MEDCOSTb + AGEb + GENHLTHb, data = data.cc, family = "binomial")
+summary(Model2)
+
+ORMod2 <- exp(cbind(OR = coef(Model2), confint(Model2)))
+ORMod2
+
+# Model 3: Testing for interaction by race, controlling for age and general health status
+Model3 <- glm(FLUSHOTb ~ MEDCOSTb + AGEb + GENHLTHb + RACEb + RACEb*MEDCOSTb, data = data.cc, family = "binomial")
+summary(Model3)
+
+ORMod3 <- exp(cbind(OR = coef(Model3), confint(Model3)))
+ORMod3
+
+# Model 4: Testing for interaction by sex, controlling for age and general health status
+Model4 <- glm(FLUSHOTb ~ MEDCOSTb + AGEb + GENHLTHb + SEXb + SEXb*MEDCOSTb, data = data.cc, family = "binomial")
+summary(Model4)
+
+ORMod4 <- exp(cbind(OR = coef(Model4), confint(Model4)))
+ORMod4
+```
+
+```{r message=FALSE, warning=FALSE}
+# Test assumptions and influence:
+
+# Linearity assumption is not applicable, as both are exposure and outcome are categorical
+
+# Influence: logistic model with cost barriers as a predictor
+MEDCOSTinfluence <- glm(FLUSHOTb ~ MEDCOSTb, data=data.cc, family="binomial")
+#influence plot - Cook's D plot-identifies observation number in parent dataset; below, observation numbers are identified by row number in the data set as ordered by R; need to look up rowid (case identifier) to find the actual case.
+plot(MEDCOSTinfluence, which=4, id.n=5, col="red") 
+# Cook's distance values are all less than 1, but several are above 4/n (4/1287 = 0.0031). Looking at those rows in the data set, it does not seem any are implausible, so I am not going to remove any as unduly influential values to account for.
+
+# Multicollinearity (VIF):
+vif(Model2)
+vif(Model3)
+vif(Model4)
+# VIF values are all less than 4; so, no issue with multicollinearity
+```
+
+```{r message=FALSE, warning=FALSE}
+#Log Likelihood for Model 2:
+logLik(Model2)
+#Compare Model 1 with Model 2:
+lrtest(Model1, Model2) # p > .05 indicates model 2 is NOT a better fit
+
+#Log Likelihood for Model 3:
+logLik(Model3) 
+#Compare Model 1 with Model 3:
+lrtest(Model1, Model3) # p > .05 indicates model 3 is NOT a better fit
+
+#Log Likelihood for Model 4:
+logLik(Model4) 
+#Compare Model 1 with Model 4:
+lrtest(Model1, Model4) # p > .05 indicates model 4 is NOT a better fit
+```
