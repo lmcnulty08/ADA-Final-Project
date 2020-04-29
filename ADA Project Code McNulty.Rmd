@@ -1,7 +1,7 @@
 ---
 title: "ADA Final Project Code"
 author: "Laura McNulty"
-date: "3/24/2020"
+date: "4/29/2020"
 output:
   html_document: default
   word_document: default
@@ -178,7 +178,6 @@ ORMod4
 
 # Influence: logistic model with cost barriers as a predictor
 MEDCOSTinfluence <- glm(FLUSHOTb ~ MEDCOSTb, data=data.cc, family="binomial")
-#influence plot - Cook's D plot-identifies observation number in parent dataset; below, observation numbers are identified by row number in the data set as ordered by R; need to look up rowid (case identifier) to find the actual case.
 plot(MEDCOSTinfluence, which=4, id.n=5, col="red") 
 # Cook's distance values are all less than 1, but several are above 4/n (4/1287 = 0.0031). Looking at those rows in the data set, it does not seem any are implausible, so I am not going to remove any as unduly influential values to account for.
 
