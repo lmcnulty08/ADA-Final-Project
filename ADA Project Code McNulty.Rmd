@@ -171,6 +171,23 @@ ORMod4 <- exp(cbind(OR = coef(Model4), confint(Model4)))
 ORMod4
 ```
 
+```{r}
+# Model 3a: Testing for interaction by race, controlling for age and general health status
+# In preparation for using contrasts.
+
+Model3a <- glm(FLUSHOTb ~ AGEb + GENHLTHb + RACEb*MEDCOSTb, data = data.cc, family = "binomial")
+summary(Model3a)
+```
+```{r}
+# Test difference between Black and White respondents when health care cost barriers are present.
+# Note, the result of exp(1.307) = 3.695 is close to the sum of the ORs 1.5036188+1.9881707+0.1749953 = 3.666785 (but not to 1.5036188+0.1749953=1.68, as reported in final table)
+
+library(multcomp)
+K <- matrix(c(0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, -1, -1), 1)
+t <- glht(Model3a, linfct = K)
+summary(t)
+```
+
 ```{r message=FALSE, warning=FALSE}
 # Test assumptions and influence:
 
